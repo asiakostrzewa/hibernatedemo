@@ -1,0 +1,91 @@
+package hib.database;
+
+import hib.model.IBaseEntity;
+import hib.model.Student;
+import org.hibernate.HibernateException;
+import org.hibernate.Session;
+import org.hibernate.Transaction;
+
+import javax.persistence.PersistenceException;
+import javax.persistence.RollbackException;
+import javax.persistence.criteria.CriteriaBuilder;
+import javax.persistence.criteria.CriteriaQuery;
+import javax.persistence.criteria.Root;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+//Repository
+public class EntityDao<T extends IBaseEntity> {
+    public void insertOrUpdate(T entity) {
+        Transaction transaction = null;
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            transaction = session.beginTransaction();   // BEGIN
+
+            session.saveOrUpdate(entity);              // OERATIONS
+
+            transaction.commit();                       // COMMIT
+        } catch (IllegalStateException | RollbackException ise) {
+            System.err.println("Błąd wstawiania rekordu.");
+            ise.printStackTrace();
+            if (transaction != null) {
+                transaction.rollback();
+            }
+        }
+    }
+
+    public Optional<T> findById(Long id, Class<T> tClass) {
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            CriteriaBuilder cb = session.getCriteriaBuilder();
+            CriteriaQuery<T> query = cb.createQuery(tClass);
+            Root<T> table = query.from(tClass);
+
+            query.select(table).where(cb.equal(table.get("id"), id));
+            T student = session.createQuery(query).getSingleResult();
+
+            return Optional.ofNullable(student);
+        } catch (PersistenceException he) {
+            System.err.println("Listing error.");
+            he.printStackTrace();
+        }
+        return Optional.empty();
+    }
+
+    public List<T> getAll(Class<T> tClass) {
+        List<T> list = new ArrayList<>();
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            CriteriaBuilder cb = session.getCriteriaBuilder();
+            CriteriaQuery<T> query = cb.createQuery(tClass);
+            Root<T> table = query.from(tClass);
+            query.select(table);
+            list.addAll(session.createQuery(query).list());
+        } catch (HibernateException he) {
+            System.err.println("Listing error.");
+            he.printStackTrace();
+        }
+        return list;
+    }
+
+    public boolean delete(Long id, Class<T> tClass) {
+        Optional<T> optionalEntity = findById(id, tClass);
+        if (optionalEntity.isPresent()) {
+            T entity = optionalEntity.get();
+            Transaction transaction = null;
+            try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+                transaction = session.beginTransaction();
+                session.delete(entity);                                                //(przekazujemy do usunięcia)
+                transaction.commit();
+                return true;
+            } catch (IllegalStateException | RollbackException ise) {
+                System.err.println("Błąd usuwania rekordu.");
+                ise.printStackTrace();
+                if (transaction != null) {
+                    transaction.rollback();
+                }
+            }
+        } else {
+            System.err.println("Nie udało się odnaleźć rekordu");
+        }
+        return false;
+    }
+}
